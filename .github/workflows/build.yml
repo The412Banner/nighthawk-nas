@@ -19,7 +19,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential gawk gettext libncurses-dev xsltproc rsync unzip zstd file wget python3 python3-setuptools
+          sudo apt-get install -y -qq build-essential gawk gettext libncurses-dev xsltproc rsync unzip zstd file wget python3 python3-setuptools squashfs-tools
 
       - name: Download and verify the OpenWrt image builder
         run: |
@@ -40,9 +40,11 @@ jobs:
             chmod 600 files/etc/dropbear/authorized_keys
             echo "SSH key added"
           else
-            echo "No NAS_AUTHORIZED_KEY secret: SSH login stays closed until a key is added on the web page"
+            echo "No NAS_AUTHORIZED_KEY secret: no SSH key in the image; the web page asks for a password on the first visit"
           fi
           chmod 755 files/etc/uci-defaults/99-nighthawk-nas
+          sh -n files/etc/uci-defaults/99-nighthawk-nas
+          sh -n files/etc/hotplug.d/iface/90-nas-ntp
 
       - name: Build
         run: |
@@ -60,6 +62,15 @@ jobs:
           cat out/SHA256SUMS
           echo "--- packages in the image that matter:"
           grep -E '^(ksmbd|luci-app-ksmbd|block-mount|kmod-fs-(ntfs3|exfat|vfat|ext4)|kmod-usb-storage|dropbear|wsdd2|ntfs-3g-utils)' out/*.manifest || true
+
+      - name: Check the image contents
+        run: |
+          mkdir chk && tar -xf out/*sysupgrade.bin -C chk
+          unsquashfs -q -d chk/fs chk/*/root etc/uci-defaults etc/hotplug.d etc/dropbear >/dev/null
+          cmp files/etc/uci-defaults/99-nighthawk-nas chk/fs/etc/uci-defaults/99-nighthawk-nas
+          cmp files/etc/hotplug.d/iface/90-nas-ntp chk/fs/etc/hotplug.d/iface/90-nas-ntp
+          if [ -s chk/fs/etc/dropbear/authorized_keys ]; then echo "SSH key in the image: yes"; else echo "SSH key in the image: no"; fi
+          ls chk/fs/etc/dropbear/ | grep -q host_key && { echo "host keys must not be in the image"; exit 1; } || echo "no SSH host keys in the image (made at first boot)"
 
       - uses: actions/upload-artifact@v4
         with:

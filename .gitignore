@@ -1,0 +1,6 @@
+# Build output and downloaded images stay out of the repository
+/ib/
+/out*/
+*.img
+*.bin
+*.tar.zst

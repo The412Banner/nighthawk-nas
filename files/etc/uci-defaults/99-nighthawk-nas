@@ -2,10 +2,8 @@
 # First boot: turn the router into a plain network drive on an existing home network.
 # OpenWrt runs this once and deletes it when it exits 0.
 
-# Name and time zone
+# Name (the time zone stays UTC; change it on the web page under System → System)
 uci set system.@system[0].hostname='nighthawk-nas'
-uci set system.@system[0].zonename='America/New_York'
-uci set system.@system[0].timezone='EST5EDT,M3.2.0,M11.1.0'
 uci commit system
 
 # Get an address from the home router instead of being 192.168.1.1 itself.
@@ -27,15 +25,19 @@ for r in $(uci -q show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\
 done
 uci -q commit wireless
 
-# SSH with keys only (a key can be added at build time, see README)
+# SSH with keys only. Add a key on the web page (System → Administration → SSH-Keys),
+# or build your own image with one (see README).
 uci set dropbear.@dropbear[0].PasswordAuth='off'
 uci set dropbear.@dropbear[0].RootPasswordAuth='off'
 uci commit dropbear
 
-# Random password for the web settings page; read it over SSH from /root/initial-password
-P=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
-printf '%s\n%s\n' "$P" "$P" | passwd root >/dev/null 2>&1
-( umask 077; echo "$P" > /root/initial-password )
+# Web page password. Image built with an SSH key: random password, read it over SSH from
+# /root/initial-password. Without a key, no password is set and the web page asks for one.
+if [ -s /etc/dropbear/authorized_keys ]; then
+	P=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
+	printf '%s\n%s\n' "$P" "$P" | passwd root >/dev/null 2>&1
+	( umask 077; echo "$P" > /root/initial-password )
+fi
 
 # Mount any USB drive under /mnt automatically (/mnt/sda1, /mnt/sdb1, ...)
 uci -q get fstab.@global[0] >/dev/null || uci add fstab global >/dev/null
