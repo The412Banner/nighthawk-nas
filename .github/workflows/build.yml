@@ -2,8 +2,6 @@ name: Build image
 
 on:
   workflow_dispatch:
-  push:
-    branches: [feat/openwrt-nas]   # temporary: workflow_dispatch only works once the workflow is on main
 
 permissions:
   contents: read
