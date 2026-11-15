@@ -1,0 +1,30 @@
+# Extra packages on top of OpenWrt's default set for the Netgear R7800.
+# One per line; lines starting with # are ignored.
+
+# Web settings page
+luci
+
+# Network share (SMB) server and its settings page
+ksmbd-server
+luci-app-ksmbd
+# Shows the share in Windows' Network view
+wsdd2
+
+# USB drives: mount them automatically
+block-mount
+kmod-usb-storage
+kmod-usb-storage-uas
+
+# Drive formats
+kmod-fs-ntfs3
+kmod-fs-exfat
+kmod-fs-vfat
+kmod-fs-ext4
+kmod-nls-utf8
+kmod-nls-cp437
+kmod-nls-iso8859-1
+# ntfsfix, to clear the "not cleanly removed" flag on NTFS drives by hand
+ntfs-3g-utils
+
+# lsusb, handy for checking what is plugged in
+usbutils

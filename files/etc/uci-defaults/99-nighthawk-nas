@@ -1,0 +1,64 @@
+#!/bin/sh
+# First boot: turn the router into a plain network drive on an existing home network.
+# OpenWrt runs this once and deletes it when it exits 0.
+
+# Name and time zone
+uci set system.@system[0].hostname='nighthawk-nas'
+uci set system.@system[0].zonename='America/New_York'
+uci set system.@system[0].timezone='EST5EDT,M3.2.0,M11.1.0'
+uci commit system
+
+# Get an address from the home router instead of being 192.168.1.1 itself.
+# The yellow LAN ports and the WAN port both work: each asks the home router for an address.
+uci set network.lan.proto='dhcp'
+uci -q delete network.lan.ipaddr
+uci -q delete network.lan.netmask
+uci -q delete network.lan.ip6assign
+uci commit network
+
+# This box only serves files: no DHCP/DNS server and no router firewall of its own.
+for s in dnsmasq odhcpd firewall; do
+	/etc/init.d/"$s" disable 2>/dev/null
+done
+
+# Wi-Fi off
+for r in $(uci -q show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+	uci set wireless."$r".disabled='1'
+done
+uci -q commit wireless
+
+# SSH with keys only (a key can be added at build time, see README)
+uci set dropbear.@dropbear[0].PasswordAuth='off'
+uci set dropbear.@dropbear[0].RootPasswordAuth='off'
+uci commit dropbear
+
+# Random password for the web settings page; read it over SSH from /root/initial-password
+P=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)
+printf '%s\n%s\n' "$P" "$P" | passwd root >/dev/null 2>&1
+( umask 077; echo "$P" > /root/initial-password )
+
+# Mount any USB drive under /mnt automatically (/mnt/sda1, /mnt/sdb1, ...)
+uci -q get fstab.@global[0] >/dev/null || uci add fstab global >/dev/null
+uci set fstab.@global[0].anon_mount='1'
+uci set fstab.@global[0].auto_mount='1'
+uci commit fstab
+
+# Share /mnt with everyone on the home network, read and write, no password
+uci set ksmbd.@globals[0].workgroup='WORKGROUP'
+uci set ksmbd.@globals[0].description='Nighthawk NAS'
+uci set ksmbd.@globals[0].interface='lan wan'
+while uci -q delete ksmbd.@share[0]; do :; done
+uci add ksmbd share >/dev/null
+uci set ksmbd.@share[-1].name='usb'
+uci set ksmbd.@share[-1].path='/mnt'
+uci set ksmbd.@share[-1].comment='USB drives'
+uci set ksmbd.@share[-1].browseable='yes'
+uci set ksmbd.@share[-1].read_only='no'
+uci set ksmbd.@share[-1].guest_ok='yes'
+uci set ksmbd.@share[-1].force_root='1'
+uci set ksmbd.@share[-1].create_mask='0666'
+uci set ksmbd.@share[-1].dir_mask='0777'
+uci commit ksmbd
+/etc/init.d/ksmbd enable
+
+exit 0

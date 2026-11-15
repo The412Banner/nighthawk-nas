@@ -1,0 +1,70 @@
+name: Build image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/openwrt-nas]   # temporary: workflow_dispatch only works once the workflow is on main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      OPENWRT_VERSION: "25.12.6"
+      TARGET: ipq806x/generic
+      PROFILE: netgear_r7800
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential gawk gettext libncurses-dev xsltproc rsync unzip zstd file wget python3 python3-setuptools
+
+      - name: Download and verify the OpenWrt image builder
+        run: |
+          base="https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${TARGET}"
+          ib="openwrt-imagebuilder-${OPENWRT_VERSION}-${TARGET/\//-}.Linux-x86_64.tar.zst"
+          wget -q "$base/$ib" "$base/sha256sums"
+          grep " \*${ib}\$" sha256sums | sha256sum -c -
+          tar --zstd -xf "$ib"
+          mv "${ib%.tar.zst}" ib
+
+      - name: Add the SSH key (optional repository secret NAS_AUTHORIZED_KEY)
+        env:
+          NAS_AUTHORIZED_KEY: ${{ secrets.NAS_AUTHORIZED_KEY }}
+        run: |
+          mkdir -p files/etc/dropbear
+          if [ -n "$NAS_AUTHORIZED_KEY" ]; then
+            printf '%s\n' "$NAS_AUTHORIZED_KEY" > files/etc/dropbear/authorized_keys
+            chmod 600 files/etc/dropbear/authorized_keys
+            echo "SSH key added"
+          else
+            echo "No NAS_AUTHORIZED_KEY secret: SSH login stays closed until a key is added on the web page"
+          fi
+          chmod 755 files/etc/uci-defaults/99-nighthawk-nas
+
+      - name: Build
+        run: |
+          pkgs="$(grep -v -E '^\s*(#|$)' packages.txt | xargs)"
+          echo "Extra packages: $pkgs"
+          make -C ib image PROFILE="$PROFILE" PACKAGES="$pkgs" FILES="$PWD/files" EXTRA_IMAGE_NAME=nas
+
+      - name: Collect images
+        run: |
+          mkdir out
+          cp ib/bin/targets/${TARGET}/*${PROFILE}*factory.img ib/bin/targets/${TARGET}/*${PROFILE}*sysupgrade.bin out/
+          cp ib/bin/targets/${TARGET}/*.manifest out/ 2>/dev/null || true
+          (cd out && sha256sum * > SHA256SUMS)
+          ls -l out
+          cat out/SHA256SUMS
+          echo "--- packages in the image that matter:"
+          grep -E '^(ksmbd|luci-app-ksmbd|block-mount|kmod-fs-(ntfs3|exfat|vfat|ext4)|kmod-usb-storage|dropbear|wsdd2|ntfs-3g-utils)' out/*.manifest || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nighthawk-nas-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
