@@ -34,6 +34,17 @@ The web settings page is at the X4S's address. Its random password is in `/root/
 ## Good to know
 
 - The share is open to every device on your home network. Do not forward its ports to the internet.
+- NTFS and FAT drives mount with OpenWrt's default `iso8859-1` character set, so names with symbols like ™ can look wrong. To use UTF-8 for a drive, over SSH (put in the drive's UUID from `block info`, and its mount folder):
+  ```
+  uci add fstab mount
+  uci set fstab.@mount[-1].uuid='<UUID>'
+  uci set fstab.@mount[-1].target='/mnt/sda1'
+  uci set fstab.@mount[-1].options='iocharset=utf8'
+  uci set fstab.@mount[-1].enabled='1'
+  uci commit fstab
+  umount /mnt/sda1 && block mount
+  ```
+  exFAT drives already use UTF-8.
 - Before unplugging a drive, unmount it under **System → Mount Points** on the web page. An NTFS drive pulled out while in use gets marked as not cleanly removed; `ntfsfix` (included) can clear that.
 - If something goes wrong, OpenWrt's failsafe mode and Netgear's TFTP recovery both need a wired computer or device.
 - To go back to Netgear's firmware, use Netgear's TFTP recovery with their official image.

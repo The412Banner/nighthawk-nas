@@ -9,7 +9,7 @@ uci set system.@system[0].timezone='EST5EDT,M3.2.0,M11.1.0'
 uci commit system
 
 # Get an address from the home router instead of being 192.168.1.1 itself.
-# The yellow LAN ports and the WAN port both work: each asks the home router for an address.
+# The black LAN ports and the yellow Internet port both work: each asks the home router for an address.
 uci set network.lan.proto='dhcp'
 uci -q delete network.lan.ipaddr
 uci -q delete network.lan.netmask
@@ -47,6 +47,8 @@ uci commit fstab
 uci set ksmbd.@globals[0].workgroup='WORKGROUP'
 uci set ksmbd.@globals[0].description='Nighthawk NAS'
 uci set ksmbd.@globals[0].interface='lan wan'
+# Let guests list the shares, so file managers can find "usb" without typing its name
+uci set ksmbd.@globals[0].allow_guest_ipc='1'
 while uci -q delete ksmbd.@share[0]; do :; done
 uci add ksmbd share >/dev/null
 uci set ksmbd.@share[-1].name='usb'
